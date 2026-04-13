@@ -32,8 +32,8 @@ Per-channel orchestration and async task management reduce blocking operations, 
 
 ### 1) Clone repository
 ```bash
-git clone <YOUR_REPOSITORY_URL>
-cd MCL
+git clone https://github.com/pluxragex/discord-sender-with-captcha.git
+cd discord-sender-with-captcha
 ```
 
 ### 2) Create virtual environment and install dependencies
