@@ -1,63 +1,106 @@
-# MCL_Old — Discord self-bot (ultra-fast channel opener)
-
-> Production-grade asynchronous Discord automation focused on **minimum latency** when a channel becomes writable.
-> Designed around a per-channel state machine, async task orchestration, and captcha solving (optional).
+# Discord Sender
+> A high-speed asynchronous Discord automation bot that reacts to channel permission openings and sends configured messages with optional captcha solving.
 
 > [!WARNING]
-> **Self-bots violate Discord ToS** and can lead to account termination.
-> You run this at your own risk. This repo is for educational / internal automation purposes.
+> This project behaves like a self-bot workflow.  
+> Using self-bot automation may violate Discord Terms of Service and can result in account restrictions or bans.
 
 ## What's unique?
+The bot is optimized for one critical scenario: detect when a locked channel becomes writable and respond in milliseconds with preconfigured messages.  
+It combines permission-change tracking, history scanning, real-time monitoring, and captcha solving in one event-driven pipeline.
 
-This project is built for one job: **be one of the first to send** a message when a channel permission flips from:
+## What technologies are used?
+> [!WARNING]
+> Below are the key technologies and infrastructure dependencies of the project.
 
-`send_messages = False` → `send_messages = True`
+### Core stack
+* **Python 3.11+**
+* **aiohttp**
+* **python-dotenv**
+* **discord.py-based local package (`discord/`)**
+* **asyncio**
 
-Key goals:
+### External integrations
+* **Captcha API** (configured via `CAPTCHA_API_URL` and `CAPTCHA_API_TOKEN`)
+* **Discord Gateway / API**
 
-- Fast reaction (no blocking I/O, background tasks, minimal work on hot path)
-- Robustness (timeouts, retries, graceful task cleanup)
-- Correctness (avoid duplicate captcha processing, handle race conditions)
-- Maintainability (modular structure, clear separation of responsibilities)
+## Why this architecture?
+The project is split into focused modules (`config`, `discord`, `services`, `utils`, `captcha`) so hot-path events stay lightweight and predictable.  
+Per-channel orchestration and async task management reduce blocking operations, avoid duplicate captcha processing, and make runtime cleanup safe.
 
-## Core behavior
+## How can I run it locally?
 
-### 1) Channel open event
+### 1) Clone repository
+```bash
+git clone <YOUR_REPOSITORY_URL>
+cd MCL
+```
 
-Listens for `on_guild_channel_update`.
+### 2) Create virtual environment and install dependencies
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-When permissions change from **cannot send** → **can send**, the bot immediately:
+### 3) Configure environment
+```bash
+cp .env.example .env
+```
 
-- checks last messages for captcha image (lookback window, default 300s)
-- if found: solves captcha and sends `<message>\n<captcha_text>`
-- if not found: sends base message(s) and starts real-time monitoring
+Fill required variables in `.env`:
+- `BOT_TOKEN`
+- `CAPTCHA_API_TOKEN`
+- `CAPTCHA_API_URL`
+- `CHANNELS_COUNT`, `CHANNEL_X_ID`, `CHANNEL_X_MESSAGE` or `CHANNEL_X_MESSAGES`
 
-### 2) Captcha before opening (history scan)
+Optional runtime settings:
+- `LOG_LEVEL`
+- `HISTORY_LOOKBACK_SECONDS`
+- `CAPTCHA_MAX_RETRIES`
+- `CAPTCHA_REQUEST_TIMEOUT`
 
-On channel open:
+### 4) Run the bot
+```bash
+python main.py
+```
 
-- read recent history (limit 50 messages)
-- filter messages created within last `HISTORY_LOOKBACK_SECONDS`
-- find supported image attachments: `png`, `jpg`, `jpeg`, `webp`
-- if multiple: uses the most recent
-- downloads image asynchronously and calls captcha API
+## Available functionality
 
-### 3) Captcha after opening (real-time monitoring)
+### Channel open/close automation
+* Tracks `on_guild_channel_update` events
+* Detects permission transition `send_messages: False -> True`
+* Sends one or multiple configured messages per target channel
+* Stops and cleans per-channel tasks when permissions close again
 
-After sending base messages (when no captcha was found initially), the bot monitors the channel via `on_message`.
+### Captcha flow
+* Scans recent history for fresh image attachments (`png`, `jpg`, `jpeg`, `webp`)
+* Solves captcha via external API before initial send when available
+* Starts real-time monitor after opening if captcha was not found in history
+* Avoids processing the same captcha message more than once
 
-If an image attachment appears:
+### Runtime reliability
+* Asynchronous HTTP session sharing for external API requests
+* Retry and timeout controls for captcha requests
+* Structured logging with configurable log level
+* Isolated services for history scan, message sending, and channel monitoring
 
-- solve it once
-- send another sequence of messages with appended captcha text
-- never process the same captcha message twice
+## Project structure
+```text
+bot/
+  captcha/                # captcha API client / solver logic
+  config.py               # environment parsing and app config model
+  discord/                # discord client integration and permission helpers
+  services/               # monitor, history scanner, and message sender services
+  utils/                  # async and image utility helpers
+  logger.py               # logging setup
+  main.py                 # runtime assembly and startup logic
+main.py                   # root entry point
+requirements.txt          # Python dependencies
+.env.example              # environment template
+```
 
-### 4) Channel close event
-
-When permissions flip back to `send_messages = False`:
-
-- stop monitoring
-- cancel all per-channel background tasks
-- cleanup channel session state
-
-## Message formats (from `.env`)
+## Notes
+> [!NOTE]
+> For stable local execution, ensure your Discord token, captcha service credentials, and channel IDs are valid before startup.  
+> Keep sensitive values only in `.env`
